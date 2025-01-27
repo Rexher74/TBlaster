@@ -84,14 +84,7 @@
             CONFIG.MARGIN_ORBIT_PX = min(window.innerWidth, window.innerHeight)*CONFIG.MARGIN_ORBIT/100;
         }));
 
-        window.addEventListener("click", function() {
-            let dirx = Math.cos(pointer.angle);
-            let diry = Math.sin(pointer.angle);
-            bullets.push(new Bullet(pointer.x, pointer.y, dirx, diry));
-            STATE.DIRECTION*=-1;
-        })
-
-        window.addEventListener("touchstart", function() {
+        window.addEventListener("pointerdown", function() {
             let dirx = Math.cos(pointer.angle);
             let diry = Math.sin(pointer.angle);
             bullets.push(new Bullet(pointer.x, pointer.y, dirx, diry));
