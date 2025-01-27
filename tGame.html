@@ -1,0 +1,356 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TBlaster</title>
+    <style>
+        body {
+            margin: 0;
+            background-image: url("./backgroundIMG.jpg");
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canv"></canvas>
+    <script>
+        // UTILITIES
+        function min(a, b) {
+            if (a > b) return b;
+            else return a;
+        }
+
+        function getRandomColor() { // ChatGPT
+            // Definir un rango mínimo para que los colores sean brillantes (evitando valores cercanos a 0)
+            const rangoMinimo = 100; // Mínimo para evitar colores oscuros
+            const rangoMaximo = 255; // Máximo permitido
+          
+            // Generar componentes RGB dentro del rango
+            const rojo = Math.floor(Math.random() * (rangoMaximo - rangoMinimo + 1)) + rangoMinimo;
+            const verde = Math.floor(Math.random() * (rangoMaximo - rangoMinimo + 1)) + rangoMinimo;
+            const azul = Math.floor(Math.random() * (rangoMaximo - rangoMinimo + 1)) + rangoMinimo;
+          
+            // Retornar el color en formato RGB
+            return `rgb(${rojo}, ${verde}, ${azul})`;
+        }
+
+        function getSpawningPos(radio) { // ChatGPT
+            // Elegir un borde aleatorio (0 = arriba, 1 = abajo, 2 = izquierda, 3 = derecha)
+            const borde = Math.floor(Math.random() * 4);
+          
+            let x, y;
+          
+            switch (borde) {
+              case 0: // Arriba
+                x = Math.random() * window.innerWidth; // Posición horizontal aleatoria
+                y = -radio; // Tangente al borde superior
+                break;
+          
+              case 1: // Abajo
+                x = Math.random() * window.innerWidth; // Posición horizontal aleatoria
+                y = window.innerHeight + radio; // Tangente al borde inferior
+                break;
+          
+              case 2: // Izquierda
+                x = -radio; // Tangente al borde izquierdo
+                y = Math.random() * window.innerHeight; // Posición vertical aleatoria
+                break;
+          
+              case 3: // Derecha
+                x = window.innerWidth + radio; // Tangente al borde derecho
+                y = Math.random() * window.innerHeight; // Posición vertical aleatoria
+                break;
+            }
+          
+            return { x, y };
+        }
+
+        function getScoreVariation(r, radioMin, radioMax, scoreMax, scoreMin) { // ChatGPT
+            // Fórmula de interpolación lineal
+            const score = scoreMax - ((r - radioMin) / (radioMax - radioMin)) * (scoreMax - scoreMin);
+            return score;
+          }
+
+        function collision(x1, y1, r1, x2, y2, r2) {
+            let distance = Math.sqrt(Math.pow(x1-x2, 2) + Math.pow(y1-y2, 2));
+            return distance <= r1+r2;
+        }
+
+        // EVENT LISTENERS
+        window.addEventListener("resize", (function() {
+            iniGame();
+            CONFIG.CENTERX = window.innerWidth/2;
+            CONFIG.CENTERY = window.innerHeight/2;
+            CONFIG.SIZE_CENTER_PX = min(window.innerWidth, window.innerHeight)*CONFIG.SIZE_CENTER/100;
+            CONFIG.MARGIN_ORBIT_PX = min(window.innerWidth, window.innerHeight)*CONFIG.MARGIN_ORBIT/100;
+        }));
+
+        window.addEventListener("click", function() {
+            let dirx = Math.cos(pointer.angle);
+            let diry = Math.sin(pointer.angle);
+            bullets.push(new Bullet(pointer.x, pointer.y, dirx, diry));
+            STATE.DIRECTION*=-1;
+        })
+
+        window.addEventListener("touchstart", function() {
+            let dirx = Math.cos(pointer.angle);
+            let diry = Math.sin(pointer.angle);
+            bullets.push(new Bullet(pointer.x, pointer.y, dirx, diry));
+            STATE.DIRECTION*=-1;
+        })
+
+        // CLASSES
+        class Pointer {
+            constructor() {
+                this.angle = 0;
+                this.x = CONFIG.CENTERX + (CONFIG.SIZE_CENTER_PX+CONFIG.MARGIN_ORBIT_PX)*Math.cos(this.angle);
+                this.y = CONFIG.CENTERY + (CONFIG.SIZE_CENTER_PX+CONFIG.MARGIN_ORBIT_PX)*Math.sin(this.angle);
+            }
+
+            move() {
+                this.angle += STATE.POINTER_SPEED*STATE.DIRECTION;
+                this.x = CONFIG.CENTERX + (CONFIG.SIZE_CENTER_PX+CONFIG.MARGIN_ORBIT_PX)*Math.cos(this.angle);
+                this.y = CONFIG.CENTERY + (CONFIG.SIZE_CENTER_PX+CONFIG.MARGIN_ORBIT_PX)*Math.sin(this.angle);
+                this.print();
+            }
+
+            print() {
+                c.beginPath();
+                c.shadowBlur = CONFIG.MBLUR;
+                c.shadowColor = CONFIG.MCOLOR;
+                c.fillStyle = CONFIG.MCOLOR;
+                c.arc(this.x, this.y, CONFIG.SIZE_CENTER_PX*STATE.POINTER_SIZE/100, 0, 2*Math.PI);
+                c.fill();
+            }
+        }
+
+        class Bullet {
+            constructor(x, y, dirx, diry) { // dirx and diry must be unit vectors
+                this.x = x;
+                this.y = y;
+                this.dirx = dirx;
+                this.diry = diry;
+                this.radius = CONFIG.SIZE_CENTER_PX*STATE.POINTER_SIZE/100;
+            }
+
+            move() {
+                this.x += this.dirx*STATE.SPEED_BULLETS;
+                this.y += this.diry*STATE.SPEED_BULLETS;
+                this.print();
+            }
+
+            print() {
+                c.beginPath();
+                c.shadowBlur = CONFIG.MBLUR;
+                c.shadowColor = CONFIG.MCOLOR;
+                c.fillStyle = CONFIG.MCOLOR;
+                c.arc(this.x, this.y, this.radius, 0, 2*Math.PI);
+                c.fill();
+            }
+
+            isOutOfCanvas() {
+                return this.x-this.radius > canvas.width || this.x+this.radius < 0
+                        || this.y-this.radius > canvas.height || this.y+this.radius < 0
+            }
+        }
+
+        class Enemy {
+            constructor(x, y, radius, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.radius = radius;
+                this.speedX = (CONFIG.CENTERX-this.x)/STATE.SPEED_ENEMIES;
+                this.speedY = (CONFIG.CENTERY-this.y)/STATE.SPEED_ENEMIES;
+            }
+
+            move() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.print();
+            }
+
+            print() {
+                c.beginPath();
+                c.shadowBlur = this.color;
+                c.shadowColor = this.color;
+                c.fillStyle = this.color;
+                c.arc(this.x, this.y, this.radius, 0, 2*Math.PI);
+                c.fill();
+            }
+
+            arrived() {
+                return Math.sqrt(Math.pow(CONFIG.CENTERX-this.x, 2) + Math.pow(CONFIG.CENTERY-this.y, 2)) <= CONFIG.SIZE_CENTER_PX+this.radius;
+            }
+        }
+
+        class GameState {
+            constructor(iniLives) {
+                this.lives = iniLives;
+                this.score = 0;
+            }
+
+            print() {
+                c.font = "20px Verdana";
+                c.fillStyle = "white";
+                c.textAlign = "center";
+                c.fillText(`Lives: ${this.lives}  Score: ${this.score}`, CONFIG.CENTERX, CONFIG.MARGIN_TOP_STATS);
+            }
+
+            updateScore(variation) {
+                this.score += variation;
+            }
+
+            updateLives(variation) {
+                this.lives+=variation;
+            }
+
+            reduceLive() {
+                this.updateLives(-1);
+            }
+
+            increaseLive() {
+                this.updateLives(1);
+            }
+        }
+
+        // MAIN
+
+        var canvas = document.getElementById("canv");
+        var c = canvas.getContext("2d");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        var CONFIG = {
+            INI_LIVES: 5,
+            CENTERX: window.innerWidth / 2,
+            CENTERY: window.innerHeight / 2,
+            SIZE_CENTER: 5, // min(SIZE_CENTER vw, SIZE_CENTER vh)
+            MARGIN_ORBIT: 2, // min(MARGIN_ORBIT vw, MARGIN_ORBIT vh)
+            MCOLOR: "#ffffff",
+            MBLUR: 20,
+            MARGIN_TOP_STATS: 40, // px
+            INCREASE_DIFFICULTY_PERIOD: 10000, // ms
+            SCORE_BASE_MAX: 100, // Score earned if enemy with size STATE.RADIUS_ENEMY_MIN eliminated
+            SCORE_BASE_MIN: 20, // Score earned if enemy with size STATE.RADIUS_ENEMY_MAX eliminated
+            DECREASE_PERIOD_SPAWNING: 0.85 // new_period = old_period*DECREASE_PERIOD_SPAWNING
+        }
+        CONFIG.SIZE_CENTER_PX = min(window.innerWidth, window.innerHeight)*CONFIG.SIZE_CENTER/100;
+        CONFIG.MARGIN_ORBIT_PX = min(window.innerWidth, window.innerHeight)*CONFIG.MARGIN_ORBIT/100;
+
+        var STATE = {
+            DIRECTION: 1,
+            POINTER_SPEED: 0.03,
+            POINTER_SIZE: 20, // % of SIZE_CENTER
+            SPEED_BULLETS: 10, // px / iteration
+            SPAWNING_PERIOD: 2000, // in ms
+            RADIUS_ENEMY_MAX: 2, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
+            RADIUS_ENEMY_MIN: 0.2, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
+            SPEED_ENEMIES: 1000 // Iterations of requestAnimationFrame to arrive to the center
+        }
+
+        var bullets = [];
+        var enemies = [];
+        var intervalSpawning;
+        var intervalIncreaseDifficlty;
+
+        function init() {
+            iniGame();
+            step();
+            iniSpawning();
+            iniIncreaseDifficultySpawning();
+        }
+
+        function gameOver() {
+            clearInterval(intervalSpawning);
+            alert("Game Over!");
+        }
+
+        function iniGame() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            c.clearRect(0, 0, innerWidth, innerHeight);
+            setCenter();
+        }
+
+        function setCenter() {
+            c.beginPath();
+            c.shadowBlur = CONFIG.MBLUR;
+            c.shadowColor = CONFIG.MCOLOR;
+            c.fillStyle = CONFIG.MCOLOR;
+            c.arc(CONFIG.CENTERX, CONFIG.CENTERY, CONFIG.SIZE_CENTER_PX, 0, 2*Math.PI);
+            c.fill();
+        }
+
+        function step() {
+            c.clearRect(0, 0, innerWidth, innerHeight);
+            setCenter();
+            let numBullets = bullets.length;
+            for (let i = numBullets-1; i >= 0; --i) {
+                bullets[i].move();
+                let removed = false;
+                if (bullets[i].isOutOfCanvas()) {
+                    bullets.splice(i, 1);
+                    removed = true;
+                }
+                
+                if (!removed) {
+                    // Check collision with enemies
+                    let nEnemies = enemies.length;
+                    for (let j = nEnemies-1; j >= 0; --j) {
+                        if (collision(bullets[i].x, bullets[i].y, bullets[i].radius, enemies[j].x, enemies[j].y, enemies[j].radius)) {
+                            let scoreVariance = getScoreVariation(enemies[j].radius, STATE.RADIUS_ENEMY_MIN*CONFIG.SIZE_CENTER_PX,
+                                                                STATE.RADIUS_ENEMY_MAX*CONFIG.SIZE_CENTER_PX, CONFIG.SCORE_BASE_MAX, CONFIG.SCORE_BASE_MIN);
+                            gs.updateScore(Math.round(scoreVariance));
+                            enemies.splice(j, 1);
+                            bullets.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+            }
+            let numEnemies = enemies.length;
+            for (let i = numEnemies-1; i >= 0; --i) {
+                enemies[i].move();
+                if (enemies[i].arrived()) {
+                    enemies.splice(i, 1);
+                    gs.reduceLive();
+                    if (gs.lives <= 0) gameOver();
+                }
+            }
+            gs.print();
+            pointer.move();
+            requestAnimationFrame(step);
+        }
+
+        function spawn() {
+            let maxRad = CONFIG.SIZE_CENTER_PX*STATE.RADIUS_ENEMY_MAX;
+            let minRad = CONFIG.SIZE_CENTER_PX*STATE.RADIUS_ENEMY_MIN;
+            let radius = Math.random()*(maxRad-minRad)+minRad;
+            let {x, y} = getSpawningPos(radius);
+            let color = getRandomColor();
+            enemies.push(new Enemy(x, y, radius, color));
+        }
+
+        function iniSpawning(period) {
+            intervalSpawning = setInterval(spawn, STATE.SPAWNING_PERIOD);
+        }
+
+        function iniIncreaseDifficultySpawning() {
+            intervalIncreaseDifficlty = setInterval(function() {
+                clearInterval(intervalSpawning);
+                STATE.SPAWNING_PERIOD*=CONFIG.DECREASE_PERIOD_SPAWNING;
+                iniSpawning(STATE.SPAWNING_PERIOD);
+            }, CONFIG.INCREASE_DIFFICULTY_PERIOD);
+        }
+
+        // GAME INICIALIZATION
+        var pointer = new Pointer();
+        var gs = new GameState(CONFIG.INI_LIVES);
+
+        init();
+
+    </script>
+</body>
+
+</html>
