@@ -34,6 +34,33 @@
             return `rgb(${rojo}, ${verde}, ${azul})`;
         }
 
+        function adjustProbabilities(probabilities, rate = 0.01) { // ChatGPT
+            const adjusted = [...probabilities];
+            const n = adjusted.length;
+          
+            // Redistribute probabilities
+            for (let i = 0; i < n; i++) {
+              if (i === 0) {
+                // Reduce probability for the weakest enemy
+                adjusted[i] -= rate;
+              } else {
+                // Increase probability for stronger enemies
+                adjusted[i] += rate / (n - 1);
+              }
+            }
+          
+            // Ensure no probability goes below 0
+            for (let i = 0; i < n; i++) {
+              if (adjusted[i] < 0) {
+                adjusted[i] = 0;
+              }
+            }
+          
+            // Normalize probabilities to sum to 1
+            const sum = adjusted.reduce((acc, val) => acc + val, 0);
+            return adjusted.map(p => p / sum);
+          }
+
         function getSpawningPos(radio) { // ChatGPT
             // Elegir un borde aleatorio (0 = arriba, 1 = abajo, 2 = izquierda, 3 = derecha)
             const borde = Math.floor(Math.random() * 4);
@@ -76,6 +103,16 @@
             return distance <= r1+r2;
         }
 
+        function getRandomLevel() {
+            let randNum = Math.random();
+            let idxLvl = 0;
+            while (randNum > PROBABILITY_LEVEL[idxLvl]) {
+                randNum-=PROBABILITY_LEVEL[idxLvl];
+                ++idxLvl;
+            }
+            return idxLvl;
+        }
+
         // EVENT LISTENERS
         window.addEventListener("resize", (function() {
             iniGame();
@@ -86,17 +123,20 @@
         }));
 
         window.addEventListener("pointerdown", function() {
-            for (const pointer of pointers) {
-                let dirx = Math.cos(pointer.angle);
-                let diry = Math.sin(pointer.angle);
-                bullets.push(new Bullet(pointer.x, pointer.y, dirx, diry));
+            if (gs.canShoot()) {
+                gs.updateNewShoot();
+                for (const pointer of pointers) {
+                    let dirx = Math.cos(pointer.angle);
+                    let diry = Math.sin(pointer.angle);
+                    bullets.push(new Bullet(pointer.x, pointer.y, dirx, diry));
+                }
+                STATE.DIRECTION*=-1;
             }
-            STATE.DIRECTION*=-1;
+            
         })
 
         class Pointer {
             constructor(angle = 0) {
-                console.log(angle);
                 this.angle = angle;
                 this.x = CONFIG.CENTERX + (CONFIG.SIZE_CENTER_PX+CONFIG.MARGIN_ORBIT_PX)*Math.cos(this.angle);
                 this.y = CONFIG.CENTERY + (CONFIG.SIZE_CENTER_PX+CONFIG.MARGIN_ORBIT_PX)*Math.sin(this.angle);
@@ -139,12 +179,14 @@
             }
 
             print() {
+                c.save();
                 c.beginPath();
                 c.shadowBlur = CONFIG.MBLUR;
                 c.shadowColor = CONFIG.MCOLOR;
                 c.fillStyle = CONFIG.MCOLOR;
                 c.arc(this.x, this.y, this.radius, 0, 2*Math.PI);
                 c.fill();
+                c.restore();
             }
 
             isOutOfCanvas() {
@@ -154,11 +196,12 @@
         }
 
         class Enemy {
-            constructor(x, y, radius, color) {
+            constructor(x, y, radius, level) {
                 this.x = x;
                 this.y = y;
-                this.color = color;
+                this.color = COLOR_LEVEL[level];
                 this.radius = radius;
+                this.level = level;
                 this.speedX = (CONFIG.CENTERX-this.x)/STATE.SPEED_ENEMIES;
                 this.speedY = (CONFIG.CENTERY-this.y)/STATE.SPEED_ENEMIES;
             }
@@ -170,12 +213,22 @@
             }
 
             print() {
+                c.save();
                 c.beginPath();
                 c.shadowBlur = this.color;
                 c.shadowColor = this.color;
                 c.fillStyle = this.color;
                 c.arc(this.x, this.y, this.radius, 0, 2*Math.PI);
                 c.fill();
+                c.restore();
+            }
+
+            reduceLives() {
+                --this.level;
+                if (this.level < 0) return true;
+                this.color = COLOR_LEVEL[this.level];
+                this.radius *= CONFIG.RADIUS_REDUCTION_LEVEL;
+                return false;
             }
 
             arrived() {
@@ -187,13 +240,33 @@
             constructor(iniLives) {
                 this.lives = iniLives;
                 this.score = 0;
+                this.shooted = 0;
+                this.hit = 0;
+                this.ss = 50000; // in mili shoots (1 shoot == 1000 mili shoots)
             }
 
             print() {
                 c.font='25px FontAwesome';
                 c.fillStyle = "white";
                 c.textAlign = "center";
-                c.fillText(`\uF004 ${this.lives}    \uF005 ${this.score}`, CONFIG.CENTERX, CONFIG.MARGIN_TOP_STATS);
+                c.shadowBlur = 0;
+                c.fillText(`\uF004 ${this.lives}    \uF005 ${this.score}    \uf140 ${Math.round(this.hit*100/this.shooted || 0)}%`, CONFIG.CENTERX, CONFIG.MARGIN_TOP_STATS);
+                this.printSS();
+            }
+
+            printSS() {
+                c.save();
+                c.lineWidth = 4;
+                c.strokeStyle = "#ea5353";
+                c.fillStyle = "#ea5353";
+                c.beginPath();
+                c.rect(window.innerWidth*7/16, window.innerHeight-40, window.innerWidth*2/16, 10);
+                c.stroke();
+                c.lineWidth = 0;
+                c.beginPath();
+                c.rect(window.innerWidth*7/16, window.innerHeight-40, (window.innerWidth*2/16)*(this.ss/(CONFIG.MAX_SHOOTS_STORAGE*1000)), 10);
+                c.fill();
+                c.restore();
             }
 
             updateScore(variation) {
@@ -211,6 +284,29 @@
             increaseLive() {
                 this.updateLives(1);
             }
+
+            increaseShooted() {
+                this.shooted++;
+            }
+
+            increaseHit() {
+                this.hit++;
+            }
+
+            incrementMS() {
+                let newMS = this.ss+CONFIG.SHOOTS_PER_FRAME*1000;
+                if (newMS <= CONFIG.MAX_SHOOTS_STORAGE*1000) this.ss = newMS;
+                else this.ss = CONFIG.MAX_SHOOTS_STORAGE*1000;
+            }
+
+            canShoot() {
+                return this.ss >= 1000;
+            }
+
+            updateNewShoot() {
+                this.ss -= 1000;
+            }
+            
         }
 
         // MAIN
@@ -228,12 +324,16 @@
             SIZE_CENTER: 5, // min(SIZE_CENTER vw, SIZE_CENTER vh)
             MARGIN_ORBIT: 2, // min(MARGIN_ORBIT vw, MARGIN_ORBIT vh)
             MCOLOR: "#ffffff",
-            MBLUR: 20,
+            MBLUR: 10,
             MARGIN_TOP_STATS: 40, // px
             INCREASE_DIFFICULTY_PERIOD: 10000, // ms
             SCORE_BASE_MAX: 100, // Score earned if enemy with size STATE.RADIUS_ENEMY_MIN eliminated
             SCORE_BASE_MIN: 20, // Score earned if enemy with size STATE.RADIUS_ENEMY_MAX eliminated
-            DECREASE_PERIOD_SPAWNING: 0.85 // new_period = old_period*DECREASE_PERIOD_SPAWNING
+            DECREASE_PERIOD_SPAWNING: 0.95, // new_period = old_period*DECREASE_PERIOD_SPAWNING
+            RADIUS_REDUCTION_LEVEL: 0.9,
+            ADJUST_PROBABILITIES_RATE: 0.01,
+            MAX_SHOOTS_STORAGE: 50,
+            SHOOTS_PER_FRAME: 0.0275 // num. shoots earned per second
         }
         CONFIG.SIZE_CENTER_PX = min(window.innerWidth, window.innerHeight)*CONFIG.SIZE_CENTER/100;
         CONFIG.MARGIN_ORBIT_PX = min(window.innerWidth, window.innerHeight)*CONFIG.MARGIN_ORBIT/100;
@@ -247,12 +347,16 @@
             RADIUS_ENEMY_MAX: 2, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
             RADIUS_ENEMY_MIN: 0.2, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
             SPEED_ENEMIES: 1000, // Iterations of requestAnimationFrame to arrive to the center
-            SCORE_GOAL: 4000 // Score after with you get a new pointer. It doubles every time archived
+            SCORE_GOAL: 6000 // Score after with you get a new pointer. It doubles every time archived
         }
+
+        const COLOR_LEVEL = ["#7eff00", "#00ffd1", "#00b2ff", "#2a00ff", "#b600ff", "#ff00a6", "#ff0000", "ff8f00", "#ffe800", "#fff7b6"];
+        var PROBABILITY_LEVEL = [0.4, 0.25, 0.15, 0.07, 0.05, 0.03, 0.021, 0.013, 0.009, 0.007];
 
         var bullets = [];
         var enemies = [];
         var pointers = [];
+        var GameOver = false;
         var intervalSpawning;
         var intervalIncreaseDifficlty;
 
@@ -264,6 +368,7 @@
         }
 
         function gameOver() {
+            GameOver = true;
             clearInterval(intervalSpawning);
             alert("Game Over!");
         }
@@ -290,30 +395,31 @@
             let numBullets = bullets.length;
             for (let i = numBullets-1; i >= 0; --i) {
                 bullets[i].move();
-                let removed = false;
                 if (bullets[i].isOutOfCanvas()) {
                     bullets.splice(i, 1);
-                    removed = true;
+                    gs.increaseShooted();
+                    continue;
                 }
                 
-                if (!removed) {
-                    // Check collision with enemies
-                    let nEnemies = enemies.length;
-                    for (let j = nEnemies-1; j >= 0; --j) {
-                        if (collision(bullets[i].x, bullets[i].y, bullets[i].radius, enemies[j].x, enemies[j].y, enemies[j].radius)) {
-                            let scoreVariance = getScoreVariation(enemies[j].radius, STATE.RADIUS_ENEMY_MIN*CONFIG.SIZE_CENTER_PX,
-                                                                STATE.RADIUS_ENEMY_MAX*CONFIG.SIZE_CENTER_PX, CONFIG.SCORE_BASE_MAX, CONFIG.SCORE_BASE_MIN);
-                            gs.updateScore(Math.round(scoreVariance));
-                            if (gs.score > STATE.SCORE_GOAL) {
-                                addNewPointer();
-                                STATE.SCORE_GOAL*= 2;
-                            }
-                            enemies.splice(j, 1);
-                            bullets.splice(i, 1);
-                            break;
+                // Check collision with enemies
+                let nEnemies = enemies.length;
+                for (let j = nEnemies-1; j >= 0; --j) {
+                    if (collision(bullets[i].x, bullets[i].y, bullets[i].radius, enemies[j].x, enemies[j].y, enemies[j].radius)) {
+                        let scoreVariance = getScoreVariation(enemies[j].radius, STATE.RADIUS_ENEMY_MIN*CONFIG.SIZE_CENTER_PX,
+                                                            STATE.RADIUS_ENEMY_MAX*CONFIG.SIZE_CENTER_PX, CONFIG.SCORE_BASE_MAX, CONFIG.SCORE_BASE_MIN);
+                        gs.updateScore(Math.round(scoreVariance));
+                        if (gs.score > STATE.SCORE_GOAL) {
+                            addNewPointer();
+                            STATE.SCORE_GOAL*= 2;
                         }
+                        if (enemies[j].reduceLives()) enemies.splice(j, 1);
+                        bullets.splice(i, 1);
+                        gs.increaseHit();
+                        gs.increaseShooted();
+                        break;
                     }
                 }
+
             }
             let numEnemies = enemies.length;
             for (let i = numEnemies-1; i >= 0; --i) {
@@ -325,10 +431,11 @@
                 }
             }
             gs.print();
+            gs.incrementMS();
             for (let i = 0; i < pointers.length; i++) {
                 pointers[i].move();
             }
-            requestAnimationFrame(step);
+            if (!GameOver) requestAnimationFrame(step);
         }
 
         function spawn() {
@@ -336,8 +443,8 @@
             let minRad = CONFIG.SIZE_CENTER_PX*STATE.RADIUS_ENEMY_MIN;
             let radius = Math.random()*(maxRad-minRad)+minRad;
             let {x, y} = getSpawningPos(radius);
-            let color = getRandomColor();
-            enemies.push(new Enemy(x, y, radius, color));
+            let level = getRandomLevel();
+            enemies.push(new Enemy(x, y, radius, level));
         }
 
         function iniSpawning(period) {
@@ -349,13 +456,14 @@
                 clearInterval(intervalSpawning);
                 STATE.SPAWNING_PERIOD*=CONFIG.DECREASE_PERIOD_SPAWNING;
                 iniSpawning(STATE.SPAWNING_PERIOD);
+                PROBABILITY_LEVEL = adjustProbabilities(PROBABILITY_LEVEL, CONFIG.ADJUST_PROBABILITIES_RATE);
             }, CONFIG.INCREASE_DIFFICULTY_PERIOD);
         }
 
         function addNewPointer() {
             let numNewPointers = pointers.length+1;
             pointers = []; // clear the array
-            let divisionSize = Math.random()*100/numNewPointers; // 100 is a arbitrary number to make Math.random() bigger
+            let divisionSize = Math.random()*4/numNewPointers; // 4 is a arbitrary number to make Math.random() bigger
             for (let i = 0; i < numNewPointers; i++) {
                 pointers.push(new Pointer(i*divisionSize));
             }
