@@ -333,7 +333,7 @@
             RADIUS_REDUCTION_LEVEL: 0.9,
             ADJUST_PROBABILITIES_RATE: 0.01,
             MAX_SHOOTS_STORAGE: 50,
-            INC_SHOOTS_PER_FRAME: 1.02 // every CONFIG.INCREASE_DIFFICULTY_PERIOD seconds
+            INC_SHOOTS_PER_FRAME: 1.01 // every CONFIG.INCREASE_DIFFICULTY_PERIOD seconds
         }
         CONFIG.SIZE_CENTER_PX = min(window.innerWidth, window.innerHeight)*CONFIG.SIZE_CENTER/100;
         CONFIG.MARGIN_ORBIT_PX = min(window.innerWidth, window.innerHeight)*CONFIG.MARGIN_ORBIT/100;
@@ -344,8 +344,8 @@
             POINTER_SIZE: 20, // % of SIZE_CENTER
             SPEED_BULLETS: 10, // px / iteration
             SPAWNING_PERIOD: 2000, // in ms
-            RADIUS_ENEMY_MAX: 2, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
-            RADIUS_ENEMY_MIN: 0.2, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
+            RADIUS_ENEMY_MAX: 2.5, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
+            RADIUS_ENEMY_MIN: 0.4, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
             SPEED_ENEMIES: 1000, // Iterations of requestAnimationFrame to arrive to the center
             SCORE_GOAL: 6000, // Score after with you get a new pointer. It doubles every time archived
             SHOOTS_PER_FRAME: 0.0275 // num. shoots earned per second
