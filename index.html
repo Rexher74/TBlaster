@@ -2,6 +2,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
     <title>Ushoot</title>
     <style>
         body {
@@ -189,10 +190,10 @@
             }
 
             print() {
-                c.font = "20px Verdana";
+                c.font='25px FontAwesome';
                 c.fillStyle = "white";
                 c.textAlign = "center";
-                c.fillText(`Lives: ${this.lives}  Score: ${this.score}`, CONFIG.CENTERX, CONFIG.MARGIN_TOP_STATS);
+                c.fillText(`\uF004 ${this.lives}    \uF005 ${this.score}`, CONFIG.CENTERX, CONFIG.MARGIN_TOP_STATS);
             }
 
             updateScore(variation) {
