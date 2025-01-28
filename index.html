@@ -294,7 +294,7 @@
             }
 
             incrementMS() {
-                let newMS = this.ss+CONFIG.SHOOTS_PER_FRAME*1000;
+                let newMS = this.ss+STATE.SHOOTS_PER_FRAME*1000;
                 if (newMS <= CONFIG.MAX_SHOOTS_STORAGE*1000) this.ss = newMS;
                 else this.ss = CONFIG.MAX_SHOOTS_STORAGE*1000;
             }
@@ -333,7 +333,7 @@
             RADIUS_REDUCTION_LEVEL: 0.9,
             ADJUST_PROBABILITIES_RATE: 0.01,
             MAX_SHOOTS_STORAGE: 50,
-            SHOOTS_PER_FRAME: 0.0275 // num. shoots earned per second
+            INC_SHOOTS_PER_FRAME: 1.02 // every CONFIG.INCREASE_DIFFICULTY_PERIOD seconds
         }
         CONFIG.SIZE_CENTER_PX = min(window.innerWidth, window.innerHeight)*CONFIG.SIZE_CENTER/100;
         CONFIG.MARGIN_ORBIT_PX = min(window.innerWidth, window.innerHeight)*CONFIG.MARGIN_ORBIT/100;
@@ -347,7 +347,8 @@
             RADIUS_ENEMY_MAX: 2, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
             RADIUS_ENEMY_MIN: 0.2, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
             SPEED_ENEMIES: 1000, // Iterations of requestAnimationFrame to arrive to the center
-            SCORE_GOAL: 6000 // Score after with you get a new pointer. It doubles every time archived
+            SCORE_GOAL: 6000, // Score after with you get a new pointer. It doubles every time archived
+            SHOOTS_PER_FRAME: 0.0275 // num. shoots earned per second
         }
 
         const COLOR_LEVEL = ["#7eff00", "#00ffd1", "#00b2ff", "#2a00ff", "#b600ff", "#ff00a6", "#ff0000", "ff8f00", "#ffe800", "#fff7b6"];
@@ -457,6 +458,7 @@
                 STATE.SPAWNING_PERIOD*=CONFIG.DECREASE_PERIOD_SPAWNING;
                 iniSpawning(STATE.SPAWNING_PERIOD);
                 PROBABILITY_LEVEL = adjustProbabilities(PROBABILITY_LEVEL, CONFIG.ADJUST_PROBABILITIES_RATE);
+                STATE.SHOOTS_PER_FRAME*=CONFIG.INC_SHOOTS_PER_FRAME;
             }, CONFIG.INCREASE_DIFFICULTY_PERIOD);
         }
 
