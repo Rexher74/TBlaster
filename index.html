@@ -465,7 +465,7 @@
         function addNewPointer() {
             let numNewPointers = pointers.length+1;
             pointers = []; // clear the array
-            let divisionSize = Math.random()*4/numNewPointers; // 4 is a arbitrary number to make Math.random() bigger
+            let divisionSize = Math.random()*2/numNewPointers; // 2 is a arbitrary number to make Math.random() bigger
             for (let i = 0; i < numNewPointers; i++) {
                 pointers.push(new Pointer(i*divisionSize));
             }
