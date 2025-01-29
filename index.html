@@ -3,17 +3,89 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
     <title>Ushoot</title>
     <style>
         body {
             margin: 0;
             background-image: url("./backgroundIMG.jpg");
+            font-family: "Poppins", sans-serif;
         }
+        #backgroundDiv {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: absolute;
+            color: white;
+        }
+
+        .bttn {
+            padding: 20px 60px;
+            border-radius: 50px;
+            font-size: 40px;
+            background: #57aae7;
+            cursor: pointer;
+            transition: background 0.4s;
+            font-weight: 600;
+        }
+
+        .bttn:hover {
+            background: #0a66c2;
+        }
+
+        #gameOverDiv {
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        #gameOverTitle {
+            text-align: center;
+            font-size: 40px;
+        }
+
+        #scoreSpan {
+            text-align: center;
+            margin: 10px;
+            font-size: 30px;
+        }
+
     </style>
 </head>
 <body>
+    <div id="backgroundDiv">
+        <div id="playDiv" class="bttn">Play</div>
+        <div id="gameOverDiv" style="display: none;">
+            <span id="gameOverTitle">Game Over!</span>
+            <span id="scoreSpan">Score: <span id="scoreSpanNum"></span></span>
+            <span id="restartGameBttn" class="bttn">Play Again</span>
+        </div>
+    </div>
     <canvas id="canv"></canvas>
     <script>
+        // Start / Restart Management
+        var started = false;
+
+        var bckDiv = document.getElementById("backgroundDiv");
+        var playBttn = document.getElementById("playDiv");
+        var gameOverDiv = document.getElementById("gameOverDiv");
+        var restartGameBttn = document.getElementById("restartGameBttn");
+
+        playBttn.addEventListener("click", function() {
+            started = true;
+            bckDiv.style.display = "none";
+            playBttn.style.display = "none";
+            init();
+        });
+
+        restartGameBttn.addEventListener("click", function() {
+            window.location.reload();
+        })
+
+
         // UTILITIES
         function min(a, b) {
             if (a > b) return b;
@@ -59,6 +131,27 @@
             // Normalize probabilities to sum to 1
             const sum = adjusted.reduce((acc, val) => acc + val, 0);
             return adjusted.map(p => p / sum);
+          }
+
+        function posicionesAleatoriasTangentes(radio) { // ChatGPT
+            // Elegir el primer borde aleatorio (0 = arriba, 1 = abajo, 2 = izquierda, 3 = derecha)
+            const primerBorde = Math.floor(Math.random() * 4);
+          
+            // Determinar el segundo borde garantizando que sea diferente
+            const opciones = [0, 1, 2, 3].filter(b => b !== primerBorde);
+            const segundoBorde = opciones[Math.floor(Math.random() * 3)]; // Elegimos entre los 3 restantes
+          
+            // Función para calcular la posición de un círculo en un borde dado
+            const obtenerPosicion = (borde) => {
+              switch (borde) {
+                case 0: return { x: Math.random() * window.innerWidth, y: -radio }; // Arriba
+                case 1: return { x: Math.random() * window.innerWidth, y: window.innerHeight + radio }; // Abajo
+                case 2: return { x: -radio, y: Math.random() * window.innerHeight }; // Izquierda
+                case 3: return { x: window.innerWidth + radio, y: Math.random() * window.innerHeight }; // Derecha
+              }
+            };
+          
+            return [obtenerPosicion(primerBorde), obtenerPosicion(segundoBorde)];
           }
 
         function getSpawningPos(radio) { // ChatGPT
@@ -114,26 +207,29 @@
         }
 
         // EVENT LISTENERS
+
         window.addEventListener("resize", (function() {
-            iniGame();
+            if (started && !GameOver) iniGame();
             CONFIG.CENTERX = window.innerWidth/2;
             CONFIG.CENTERY = window.innerHeight/2;
             CONFIG.SIZE_CENTER_PX = min(window.innerWidth, window.innerHeight)*CONFIG.SIZE_CENTER/100;
             CONFIG.MARGIN_ORBIT_PX = min(window.innerWidth, window.innerHeight)*CONFIG.MARGIN_ORBIT/100;
         }));
 
-        window.addEventListener("pointerdown", function() {
-            if (gs.canShoot()) {
-                gs.updateNewShoot();
-                for (const pointer of pointers) {
-                    let dirx = Math.cos(pointer.angle);
-                    let diry = Math.sin(pointer.angle);
-                    bullets.push(new Bullet(pointer.x, pointer.y, dirx, diry));
+        function createEventListeners() {
+            window.addEventListener("pointerdown", function() {
+                if (gs.canShoot()) {
+                    gs.updateNewShoot();
+                    for (const pointer of pointers) {
+                        let dirx = Math.cos(pointer.angle);
+                        let diry = Math.sin(pointer.angle);
+                        bullets.push(new Bullet(pointer.x, pointer.y, dirx, diry));
+                    }
+                    STATE.DIRECTION*=-1;
                 }
-                STATE.DIRECTION*=-1;
-            }
-            
-        })
+                
+            })
+        }
 
         class Pointer {
             constructor(angle = 0) {
@@ -246,12 +342,14 @@
             }
 
             print() {
+                c.save();
                 c.font='25px FontAwesome';
                 c.fillStyle = "white";
                 c.textAlign = "center";
                 c.shadowBlur = 0;
                 c.fillText(`\uF004 ${this.lives}    \uF005 ${this.score}    \uf140 ${Math.round(this.hit*100/this.shooted || 0)}%`, CONFIG.CENTERX, CONFIG.MARGIN_TOP_STATS);
                 this.printSS();
+                c.restore();
             }
 
             printSS() {
@@ -309,6 +407,42 @@
             
         }
 
+        class Live {
+            constructor(inix, iniy, endx, endy) {
+                this.x = inix;
+                this.y = iniy;
+                this.radius = STATE.RADIUS_LIVE*CONFIG.SIZE_CENTER_PX;
+                this.speedX = (endx-inix)/STATE.SPEED_LIVES;
+                this.speedY = (endy-iniy)/STATE.SPEED_LIVES;
+                this.itersRemaining = STATE.SPEED_LIVES;
+            }
+
+            move() {
+                this.x+=this.speedX;
+                this.y+=this.speedY;
+                --this.itersRemaining;
+                this.print();
+                if (this.itersRemaining <= 0) return true;
+                return false;
+            }
+
+            print() {
+                c.save();
+                c.font=`${this.radius}px FontAwesome`;
+                c.textAlign = "center";
+                c.fillStyle = "red";
+                c.shadowBlur = CONFIG.MBLUR;
+                c.shadowColor = "red";
+                c.beginPath();
+                c.fillStyle = "#eb344c";
+                c.arc(this.x, this.y, this.radius, 0, 2*Math.PI);
+                c.fill();
+                c.fillStyle = "#ffebed";
+                c.fillText("\uF004", this.x, this.y+this.radius/2); // to adjusit to the center
+                c.restore();
+            }
+        }
+
         // MAIN
 
         var canvas = document.getElementById("canv");
@@ -333,7 +467,7 @@
             RADIUS_REDUCTION_LEVEL: 0.9,
             ADJUST_PROBABILITIES_RATE: 0.01,
             MAX_SHOOTS_STORAGE: 50,
-            INC_SHOOTS_PER_FRAME: 1.01 // every CONFIG.INCREASE_DIFFICULTY_PERIOD seconds
+            INC_SHOOTS_PER_FRAME: 1.007 // every CONFIG.INCREASE_DIFFICULTY_PERIOD seconds
         }
         CONFIG.SIZE_CENTER_PX = min(window.innerWidth, window.innerHeight)*CONFIG.SIZE_CENTER/100;
         CONFIG.MARGIN_ORBIT_PX = min(window.innerWidth, window.innerHeight)*CONFIG.MARGIN_ORBIT/100;
@@ -343,11 +477,14 @@
             POINTER_SPEED: 0.03,
             POINTER_SIZE: 20, // % of SIZE_CENTER
             SPEED_BULLETS: 10, // px / iteration
-            SPAWNING_PERIOD: 2000, // in ms
+            SPAWNING_PERIOD: 2250, // in ms
             RADIUS_ENEMY_MAX: 2.5, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
             RADIUS_ENEMY_MIN: 0.4, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_ENEMY_MAX = CONFIG.SIZE_CENTER_PX)
-            SPEED_ENEMIES: 1000, // Iterations of requestAnimationFrame to arrive to the center
+            SPEED_ENEMIES: 1250, // Iterations of requestAnimationFrame to arrive to the center
+            SPEED_LIVES: 500, // Frames from ini pos to end pos
             SCORE_GOAL: 6000, // Score after with you get a new pointer. It doubles every time archived
+            PC_SPAWNING_LIVE_PER_FRAME: 0.0002,
+            RADIUS_LIVE: 0.75, // Proportion with CONFIG.SIZE_CENTER_PX (1 means RADIUS_LIVE = CONFIG.SIZE_CENTER_PX)
             SHOOTS_PER_FRAME: 0.0275 // num. shoots earned per second
         }
 
@@ -357,6 +494,7 @@
         var bullets = [];
         var enemies = [];
         var pointers = [];
+        var lives = [];
         var GameOver = false;
         var intervalSpawning;
         var intervalIncreaseDifficlty;
@@ -366,12 +504,18 @@
             step();
             iniSpawning();
             iniIncreaseDifficultySpawning();
+            createEventListeners();
         }
 
         function gameOver() {
             GameOver = true;
             clearInterval(intervalSpawning);
-            alert("Game Over!");
+            document.getElementById("scoreSpanNum").textContent = gs.score;
+            bckDiv.style.display = "flex";
+            gameOverDiv.style.display = "flex";
+            setTimeout(function() {
+                c.clearRect(0, 0, innerWidth, innerHeight);
+            }, 10)
         }
 
         function iniGame() {
@@ -390,9 +534,17 @@
             c.fill();
         }
 
+        function chanceSpawnLive(pc) {
+            let randomN = Math.random();
+            if (randomN < pc) spawnLive();
+        }
+
         function step() {
             c.clearRect(0, 0, innerWidth, innerHeight);
             setCenter();
+
+            chanceSpawnLive(STATE.PC_SPAWNING_LIVE_PER_FRAME);
+
             let numBullets = bullets.length;
             for (let i = numBullets-1; i >= 0; --i) {
                 bullets[i].move();
@@ -401,6 +553,8 @@
                     gs.increaseShooted();
                     continue;
                 }
+
+                let removedBullet = false;
                 
                 // Check collision with enemies
                 let nEnemies = enemies.length;
@@ -417,7 +571,20 @@
                         bullets.splice(i, 1);
                         gs.increaseHit();
                         gs.increaseShooted();
+                        removedBullet = true;
                         break;
+                    }
+                }
+                if (!removedBullet) {
+                    // Check live collision
+                    let numLives = lives.length;
+                    for (let j = numLives-1; j >= 0; --j) {
+                        if (collision(bullets[i].x, bullets[i].y, bullets[i].radius, lives[j].x, lives[j].y, lives[j].radius)) {
+                            lives.splice(j, 1);
+                            bullets.splice(i, 1);
+                            gs.increaseLive();
+                            break;
+                        }
                     }
                 }
 
@@ -430,6 +597,10 @@
                     gs.reduceLive();
                     if (gs.lives <= 0) gameOver();
                 }
+            }
+            let numLives = lives.length;
+            for (let i = numLives-1; i >= 0; --i) {
+                if (lives[i].move()) lives.splice(i, 1);
             }
             gs.print();
             gs.incrementMS();
@@ -446,6 +617,11 @@
             let {x, y} = getSpawningPos(radius);
             let level = getRandomLevel();
             enemies.push(new Enemy(x, y, radius, level));
+        }
+
+        function spawnLive() {
+            let poss = posicionesAleatoriasTangentes(CONFIG.SIZE_CENTER_PX*STATE.RADIUS_LIVE);
+            lives.push(new Live(poss[0].x, poss[0].y, poss[1].x, poss[1].y));
         }
 
         function iniSpawning(period) {
@@ -465,7 +641,7 @@
         function addNewPointer() {
             let numNewPointers = pointers.length+1;
             pointers = []; // clear the array
-            let divisionSize = Math.random()*2/numNewPointers; // 2 is a arbitrary number to make Math.random() bigger
+            let divisionSize = Math.random()/numNewPointers;
             for (let i = 0; i < numNewPointers; i++) {
                 pointers.push(new Pointer(i*divisionSize));
             }
@@ -475,8 +651,6 @@
         // GAME INICIALIZATION
         pointers.push(new Pointer());
         var gs = new GameState(CONFIG.INI_LIVES);
-
-        init();
 
     </script>
 </body>
